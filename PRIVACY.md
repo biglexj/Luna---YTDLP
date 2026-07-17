@@ -1,23 +1,11 @@
-# Política de Privacidad de Luna YT-DLP Downloader 🛡️
+# Política de privacidad de Luna Fetch
 
-**Última actualización: 02 de julio de 2026**
+**Última actualización: 16 de julio de 2026**
 
-En **Luna YT-DLP Downloader**, nos tomamos muy en serio tu privacidad. Esta política describe cómo manejamos tus datos al usar la aplicación.
+Luna Fetch procesa localmente los enlaces y archivos elegidos por el usuario. No requiere una cuenta, no incorpora publicidad, telemetría ni rastreadores y no envía un historial de descargas a Biglex J.
 
-## 1. Procesamiento Local y Privacidad de Datos
-Luna YT-DLP Downloader es un cliente gráfico para descargar videos y música. El procesamiento de tus descargas se realiza de la siguiente manera:
-- **Descargas Directas**: La aplicación ejecuta localmente el comando `yt-dlp` para realizar consultas y descargas. Todo el tráfico de descarga ocurre directamente entre tu dispositivo y los servidores de la plataforma de video (por ejemplo, YouTube). **Ningún archivo de video o audio pasa por servidores de terceros ni es enviado a nosotros.**
-- **Conversión de Audio**: La conversión a MP3, M4A o FLAC se realiza de forma local en tu computadora utilizando `ffmpeg`. No se realiza procesamiento en la nube para la transcodificación.
+Las consultas y descargas se realizan directamente entre el dispositivo, `yt-dlp` y el sitio que aloja el contenido. La combinación o conversión con FFmpeg también se ejecuta en el dispositivo. En Android, el motor puede consultar GitHub para actualizar `yt-dlp` y obtener los componentes EJS oficiales requeridos por YouTube. Esos servicios y los sitios de origen pueden recibir la dirección IP, cabeceras y otros datos normales de una conexión directa según sus propias políticas.
 
-## 2. Almacenamiento de Información
-- **Preferencias Locales**: La aplicación no requiere cuentas de usuario ni almacena información personal. Las preferencias y la carpeta de destino seleccionadas por el usuario se guardan únicamente en el equipo local.
-- **Historial**: No almacenamos un historial de tus enlaces en la nube ni de manera persistente fuera de tu máquina.
+La aplicación conserva únicamente preferencias locales, como el tema y el destino elegido. En Android, el usuario concede acceso persistente a una carpeta mediante el selector del sistema; Luna Fetch utiliza ese permiso para escribir los archivos solicitados.
 
-## 3. Telemetría y Seguimiento
-Luna YT-DLP Downloader **no incluye** telemetría, rastreadores de anuncios ni herramientas de análisis del comportamiento del usuario. Respetamos tu privacidad y no recopilamos estadísticas de uso ni datos de tu sistema.
-
-## 4. Requisitos Externos
-La aplicación requiere `yt-dlp` y `ffmpeg` instalados en el sistema (por ejemplo, a través de `winget`). Los términos de uso de estas herramientas y de los sitios desde donde descargas el contenido están sujetos a sus respectivas políticas.
-
----
-*Al usar Luna YT-DLP Downloader, aceptas las prácticas descritas en esta política.*
+El usuario es responsable de respetar los derechos de autor, términos de servicio y leyes aplicables al contenido descargado.

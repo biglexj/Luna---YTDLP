@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
+  <Identity Name="biglexj.LunaFetch" Publisher="CN=biglexj" Version="{{VERSION}}" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>Luna Fetch</DisplayName>
+    <PublisherDisplayName>biglexj</PublisherDisplayName>
+    <Description>Descarga videos y audio con una interfaz multiplataforma</Description>
+    <Logo>Image\StoreLogo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources><Resource Language="es-ES" /></Resources>
+  <Applications>
+    <Application Id="App" Executable="LunaFetch.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Luna Fetch"
+        Description="Descarga videos y audio"
+        BackgroundColor="transparent"
+        Square150x150Logo="Image\Square150x150Logo.png"
+        Square44x44Logo="Image\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Image\Wide310x150Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+  <Capabilities><rescap:Capability Name="runFullTrust" /></Capabilities>
+</Package>

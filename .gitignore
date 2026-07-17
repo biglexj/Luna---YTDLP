@@ -2,6 +2,20 @@
 bin/
 obj/
 publish/
+build/
+release/
+.gradle/
+.kotlin/
+**/build/
+local.properties
+keystore.properties
+signing/
+*.jks
+*.keystore
+*.pfx
+*.p12
+*.apk
+*.aab
 
 ## Visual Studio / Code Cache
 .vs/
@@ -17,8 +31,8 @@ publish/
 .gemini/
 mcp/
 brain/
-scratch/
+/scratch/
+/test/
 task.md
 implementation_plan.md
 walkthrough.md
-roadmap.md
