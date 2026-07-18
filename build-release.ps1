@@ -26,6 +26,100 @@ Assert-SemanticVersion $Version
 if (-not (Test-Path -LiteralPath $releaseNotesPath)) { throw "No se encontró $releaseNotesPath" }
 if (-not $LocalOnly -and $SkipSigning) { throw "Una publicación oficial no puede usar -SkipSigning." }
 
+function Get-MsiProductCode {
+    param([Parameter(Mandatory)] [string]$Path)
+
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($Path, 0)
+    $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'")
+    $view.Execute()
+    $record = $view.Fetch()
+    if (-not $record) { throw "No se encontró ProductCode en $Path." }
+    return $record.StringData(1)
+}
+
+function Update-WingetManifest {
+    param(
+        [Parameter(Mandatory)] [string]$Root,
+        [Parameter(Mandatory)] [string]$Version,
+        [Parameter(Mandatory)] [string]$MsiPath
+    )
+
+    $manifestDirectory = Join-Path $Root "packaging\winget\manifests\b\biglexj\LunaFetch\$Version"
+    New-Item -ItemType Directory -Path $manifestDirectory -Force | Out-Null
+    $productCode = Get-MsiProductCode $MsiPath
+    $sha256 = (Get-FileHash -LiteralPath $MsiPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    $releaseDate = (Get-Date).ToString("yyyy-MM-dd")
+
+    @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.10.0.schema.json
+
+PackageIdentifier: biglexj.LunaFetch
+PackageVersion: $Version
+DefaultLocale: es-PE
+ManifestType: version
+ManifestVersion: 1.10.0
+"@ | Set-Content -LiteralPath (Join-Path $manifestDirectory "biglexj.LunaFetch.yaml") -Encoding UTF8 -NoNewline
+
+    @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
+
+PackageIdentifier: biglexj.LunaFetch
+PackageVersion: $Version
+InstallerType: wix
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+ProductCode: '$productCode'
+ReleaseDate: $releaseDate
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/biglexj/Luna---Fetch/releases/download/v$Version/LunaFetch-Windows-$Version.msi
+    InstallerSha256: $sha256
+ManifestType: installer
+ManifestVersion: 1.10.0
+"@ | Set-Content -LiteralPath (Join-Path $manifestDirectory "biglexj.LunaFetch.installer.yaml") -Encoding UTF8 -NoNewline
+
+    @"
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+
+PackageIdentifier: biglexj.LunaFetch
+PackageVersion: $Version
+PackageLocale: es-PE
+Publisher: biglexj
+PublisherUrl: https://github.com/biglexj
+PublisherSupportUrl: https://github.com/biglexj/Luna---Fetch/issues
+Author: Biglex J
+PackageName: Luna Fetch
+PackageUrl: https://github.com/biglexj/Luna---Fetch
+License: MIT
+LicenseUrl: https://github.com/biglexj/Luna---Fetch/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Biglex J
+ShortDescription: Descarga videos y audio en alta calidad desde una interfaz multiplataforma.
+Description: |-
+  Luna Fetch analiza enlaces multimedia y descarga video MP4/WebM o audio MP3/M4A.
+  Incluye selección de calidad, progreso, cancelación, registro técnico y apertura del resultado.
+Moniker: lunafetch
+Tags:
+  - audio
+  - downloader
+  - media
+  - video
+  - youtube
+ReleaseNotes: |-
+  Luna Fetch $Version publica APK Android separados para ARM64, ARM32 y x86_64,
+  y simplifica el selector de tema a un único control visual.
+ReleaseNotesUrl: https://github.com/biglexj/Luna---Fetch/releases/tag/v$Version
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0
+"@ | Set-Content -LiteralPath (Join-Path $manifestDirectory "biglexj.LunaFetch.locale.es-PE.yaml") -Encoding UTF8 -NoNewline
+
+    return $manifestDirectory
+}
+
 $tag = "v$Version"
 $output = Join-Path $root "release"
 if (-not $LocalOnly) { Assert-PublishPreflight -Root $root -Repository $repository -Tag $tag }
@@ -65,10 +159,7 @@ if (-not $SkipBuild) {
     if ($LocalOnly) {
         $tasks += ":composeApp:assembleDebug"
     } else {
-        $tasks += @(
-            ":composeApp:assembleRelease",
-            ":composeApp:bundleRelease"
-        )
+        $tasks += ":composeApp:assembleRelease"
     }
     if (-not $SkipTests) { $tasks = @(":composeApp:desktopTest") + $tasks }
     Invoke-Checked (Join-Path $root "gradlew.bat") (@("-Dorg.gradle.java.home=$jdk") + $tasks)
@@ -100,41 +191,52 @@ foreach ($artifact in @($exe, $msi)) {
 }
 
 $androidArtifacts = @()
-if ($LocalOnly) {
-    $apk = Join-Path $output "LunaFetch-Android-$Version-debug.apk"
-    Copy-Item -LiteralPath (Join-Path $root "composeApp\build\outputs\apk\debug\composeApp-debug.apk") -Destination $apk
-    $androidArtifacts += $apk
-} else {
-    $apk = Join-Path $output "LunaFetch-Android-$Version.apk"
-    $aab = Join-Path $output "LunaFetch-Android-$Version.aab"
-    $apkSource = Join-Path $root "composeApp\build\outputs\apk\release\composeApp-release.apk"
-    $aabSource = Join-Path $root "composeApp\build\outputs\bundle\release\composeApp-release.aab"
-    foreach ($artifact in @($apkSource, $aabSource)) {
-        if (-not (Test-Path -LiteralPath $artifact)) { throw "No se generó el artefacto Android esperado: $artifact" }
-    }
+$androidAbis = @("arm64-v8a", "armeabi-v7a", "x86_64")
+$androidVariant = if ($LocalOnly) { "debug" } else { "release" }
+$apkOutput = Join-Path $root "composeApp\build\outputs\apk\$androidVariant"
+$metadataPath = Join-Path $apkOutput "output-metadata.json"
+if (-not (Test-Path -LiteralPath $metadataPath)) { throw "No se generó el metadato de APK: $metadataPath" }
+$metadata = Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
-    $buildTools = Get-ChildItem -LiteralPath (Join-Path $env:ANDROID_HOME "build-tools") -Directory |
-        Sort-Object { [version]$_.Name } -Descending |
-        Select-Object -First 1
-    if (-not $buildTools) { throw "No se encontraron Android build-tools para validar el APK." }
-    $apkSigner = Join-Path $buildTools.FullName "apksigner.bat"
-    $aapt = Join-Path $buildTools.FullName "aapt.exe"
+$buildTools = Get-ChildItem -LiteralPath (Join-Path $env:ANDROID_HOME "build-tools") -Directory |
+    Sort-Object { [version]$_.Name } -Descending |
+    Select-Object -First 1
+if (-not $buildTools) { throw "No se encontraron Android build-tools para validar los APK." }
+$apkSigner = Join-Path $buildTools.FullName "apksigner.bat"
+$aapt = Join-Path $buildTools.FullName "aapt.exe"
+
+foreach ($abi in $androidAbis) {
+    $element = @($metadata.elements) | Where-Object {
+        @($_.filters | Where-Object { $_.filterType -eq "ABI" -and $_.value -eq $abi }).Count -eq 1
+    }
+    if (@($element).Count -ne 1) { throw "Se esperaba exactamente un APK para $abi." }
+    $apkSource = Join-Path $apkOutput $element[0].outputFile
+    if (-not (Test-Path -LiteralPath $apkSource)) { throw "No se generó el APK para ${abi}: $apkSource" }
+
     Invoke-Checked $apkSigner @("verify", "--verbose", "--print-certs", $apkSource)
-    $badging = (& $aapt dump badging $apkSource | Select-Object -First 1)
-    if ($LASTEXITCODE -ne 0) { throw "No se pudo inspeccionar la identidad del APK." }
+    $badging = (& $aapt dump badging $apkSource) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "No se pudo inspeccionar el APK para $abi." }
     if ($badging -notmatch "name='com\.biglexj\.lunafetch'") {
-        throw "El applicationId del APK no corresponde a Luna Fetch: $badging"
+        throw "El applicationId del APK para $abi no corresponde a Luna Fetch."
     }
     if ($badging -notmatch "versionCode='$newCode'" -or $badging -notmatch "versionName='$([regex]::Escape($Version))'") {
-        throw "La versión interna del APK no coincide con $Version ($newCode): $badging"
+        throw "La versión interna del APK para $abi no coincide con $Version ($newCode)."
     }
-    & (Join-Path $jdk "bin\jarsigner.exe") -verify $aabSource *> $null
-    if ($LASTEXITCODE -ne 0) { throw "La firma del AAB no superó la verificación." }
+    if ($badging -notmatch "native-code: '$([regex]::Escape($abi))'") {
+        throw "El APK para $abi no contiene exclusivamente esa ABI."
+    }
 
+    $debugSuffix = if ($LocalOnly) { "-debug" } else { "" }
+    $apk = Join-Path $output "LunaFetch-Android-$abi-$Version$debugSuffix.apk"
     Copy-Item -LiteralPath $apkSource -Destination $apk
-    Copy-Item -LiteralPath $aabSource -Destination $aab
-    $androidArtifacts += @($apk, $aab)
+    $androidArtifacts += $apk
 }
+
+$unexpectedAndroidOutputs = @($metadata.elements) | Where-Object {
+    $outputAbi = @($_.filters | Where-Object { $_.filterType -eq "ABI" } | ForEach-Object { $_.value })
+    $outputAbi.Count -ne 1 -or $outputAbi[0] -notin $androidAbis
+}
+if ($unexpectedAndroidOutputs) { throw "El build produjo APK universales o ABI no autorizadas." }
 
 if (-not $SkipSigning) {
     $certificate = Join-Path $root "LunaFetch_Dev_Certificate.pfx"
@@ -160,6 +262,9 @@ $hashArtifacts |
     Set-Content -LiteralPath $hashPath -Encoding UTF8
 
 if ($LocalOnly) { Write-Host "Build local terminado en $output" -ForegroundColor Green; exit 0 }
+
+$wingetManifestDirectory = Update-WingetManifest -Root $root -Version $Version -MsiPath $msi
+Invoke-Checked winget @("validate", "--manifest", $wingetManifestDirectory)
 
 Push-Location $root
 try {

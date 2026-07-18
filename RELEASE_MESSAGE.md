@@ -1,9 +1,8 @@
-# 🌙 Luna Fetch 1.0.1
+# 🌙 Luna Fetch 1.0.2
 
-Luna renace como una aplicación Kotlin Multiplatform para Windows, Linux y Android.
+Una actualización más ligera y directa para Android.
 
-- ✨ Nuevo nombre e interfaz Compose compartida.
-- 📱 Material 3 y color dinámico en Android.
-- 🎬 Video MP4/WebM y audio MP3/M4A.
-- ⏱️ Progreso, ETA, logs y cancelación real.
-- 📦 Empaquetado reproducible con hashes para escritorio y Android.
+- 📦 APK independientes para ARM64, ARM32 y x86_64.
+- ⚡ Sin APK universal, x86 ni AAB: descargas mucho más pequeñas.
+- 🌓 Un único control para alternar Sistema, Claro y Oscuro.
+- 🔐 Paquetes firmados y hashes SHA-256 para cada descarga.

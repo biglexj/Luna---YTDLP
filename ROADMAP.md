@@ -11,7 +11,6 @@
 - Cola de descargas y selección de elementos de playlists.
 - Historial local con apertura rápida de archivos.
 - Administración y actualización guiada de `yt-dlp`/FFmpeg en escritorio.
-- División de APK por ABI para reducir el tamaño de descarga.
 
 ## Completado
 
@@ -19,4 +18,5 @@
 - Interfaz Compose responsive con Material 3 y radios controlados.
 - Targets Windows, Linux y Android.
 - Motor Android local, almacenamiento SAF y servicio en primer plano.
-- Empaquetado EXE, MSI, DEB/RPM, APK/AAB y hashes SHA-256; MSIX descartado.
+- Empaquetado EXE, MSI, DEB/RPM y APK ARM64/ARM32/x86_64 con hashes SHA-256; MSIX descartado.
+- División de APK Android por ABI; APK universal, x86 y AAB descartados.

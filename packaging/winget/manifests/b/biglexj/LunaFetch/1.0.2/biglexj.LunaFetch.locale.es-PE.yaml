@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+
+PackageIdentifier: biglexj.LunaFetch
+PackageVersion: 1.0.2
+PackageLocale: es-PE
+Publisher: biglexj
+PublisherUrl: https://github.com/biglexj
+PublisherSupportUrl: https://github.com/biglexj/Luna---Fetch/issues
+Author: Biglex J
+PackageName: Luna Fetch
+PackageUrl: https://github.com/biglexj/Luna---Fetch
+License: MIT
+LicenseUrl: https://github.com/biglexj/Luna---Fetch/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Biglex J
+ShortDescription: Descarga videos y audio en alta calidad desde una interfaz multiplataforma.
+Description: |-
+  Luna Fetch analiza enlaces multimedia y descarga video MP4/WebM o audio MP3/M4A.
+  Incluye selección de calidad, progreso, cancelación, registro técnico y apertura del resultado.
+Moniker: lunafetch
+Tags:
+  - audio
+  - downloader
+  - media
+  - video
+  - youtube
+ReleaseNotes: |-
+  Luna Fetch 1.0.2 publica APK Android separados para ARM64, ARM32 y x86_64,
+  y simplifica el selector de tema a un único control visual.
+ReleaseNotesUrl: https://github.com/biglexj/Luna---Fetch/releases/tag/v1.0.2
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0

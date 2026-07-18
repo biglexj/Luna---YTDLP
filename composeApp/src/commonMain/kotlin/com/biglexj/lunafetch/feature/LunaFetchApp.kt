@@ -1,6 +1,7 @@
 package com.biglexj.lunafetch.feature
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,14 +29,20 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +51,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,6 +75,8 @@ import com.biglexj.lunafetch.domain.PlatformBindings
 import com.biglexj.lunafetch.domain.QualityOption
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.collectAsState
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 fun LunaFetchApp(platform: PlatformBindings) {
@@ -69,13 +87,7 @@ fun LunaFetchApp(platform: PlatformBindings) {
     LunaFetchTheme(themeMode) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                AppHeader(themeMode) {
-                    themeMode = when (themeMode) {
-                        ThemeMode.System -> ThemeMode.Light
-                        ThemeMode.Light -> ThemeMode.Dark
-                        ThemeMode.Dark -> ThemeMode.System
-                    }
-                }
+                AppHeader(themeMode, onThemeSelected = { themeMode = it })
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                     val compact = maxWidth < 720.dp
                     val scroll = rememberScrollState()
@@ -125,26 +137,179 @@ private fun MainCards(state: LunaFetchState, presenter: LunaFetchPresenter, plat
 }
 
 @Composable
-private fun AppHeader(mode: ThemeMode, onThemeClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Luna Fetch", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Descarga videos y audio en alta calidad", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        TextButton(onClick = onThemeClick, shape = RoundedCornerShape(12.dp)) {
-            Text(
-                when (mode) {
-                    ThemeMode.System -> "Sistema"
-                    ThemeMode.Light -> "Claro"
-                    ThemeMode.Dark -> "Oscuro"
-                },
-            )
+private fun AppHeader(mode: ThemeMode, onThemeSelected: (ThemeMode) -> Unit) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        if (maxWidth < 520.dp) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Luna Fetch",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    ThemeModeButton(mode, onThemeSelected)
+                }
+                Text(
+                    "Descarga videos y audio en alta calidad",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Luna Fetch", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Descarga videos y audio en alta calidad",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ThemeModeButton(mode, onThemeSelected)
+            }
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThemeModeButton(currentMode: ThemeMode, onModeSelected: (ThemeMode) -> Unit) {
+    val nextMode = when (currentMode) {
+        ThemeMode.System -> ThemeMode.Light
+        ThemeMode.Light -> ThemeMode.Dark
+        ThemeMode.Dark -> ThemeMode.System
+    }
+    val currentLabel = when (currentMode) {
+        ThemeMode.System -> "Sistema"
+        ThemeMode.Light -> "Claro"
+        ThemeMode.Dark -> "Oscuro"
+    }
+    val nextLabel = when (nextMode) {
+        ThemeMode.System -> "Sistema"
+        ThemeMode.Light -> "Claro"
+        ThemeMode.Dark -> "Oscuro"
+    }
+    val actionLabel = "Cambiar al tema $nextLabel"
+
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(actionLabel) } },
+        state = rememberTooltipState(),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = actionLabel,
+                    onClick = { onModeSelected(nextMode) },
+                )
+                .semantics { contentDescription = "Tema actual: $currentLabel. $actionLabel" },
+            contentAlignment = Alignment.Center,
+        ) {
+            ThemeModeGlyph(
+                mode = currentMode,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeGlyph(mode: ThemeMode, modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    Canvas(modifier) {
+        val strokeWidth = 1.9.dp.toPx()
+        when (mode) {
+            ThemeMode.System -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(size.width * 0.1f, size.height * 0.16f),
+                    size = Size(size.width * 0.8f, size.height * 0.58f),
+                    cornerRadius = CornerRadius(2.dp.toPx()),
+                    style = Stroke(strokeWidth, cap = StrokeCap.Round),
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.5f, size.height * 0.74f),
+                    Offset(size.width * 0.5f, size.height * 0.88f),
+                    strokeWidth,
+                    StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.3f, size.height * 0.88f),
+                    Offset(size.width * 0.7f, size.height * 0.88f),
+                    strokeWidth,
+                    StrokeCap.Round,
+                )
+            }
+
+            ThemeMode.Light -> {
+                drawCircle(color, radius = size.minDimension * 0.19f, style = Stroke(strokeWidth))
+                repeat(8) { index ->
+                    val angle = Math.toRadians(index * 45.0)
+                    val direction = Offset(cos(angle).toFloat(), sin(angle).toFloat())
+                    val center = this.center
+                    drawLine(
+                        color,
+                        center + direction * (size.minDimension * 0.31f),
+                        center + direction * (size.minDimension * 0.43f),
+                        strokeWidth,
+                        StrokeCap.Round,
+                    )
+                }
+            }
+
+            ThemeMode.Dark -> {
+                val moon = Path().apply {
+                    moveTo(size.width * 0.68f, size.height * 0.08f)
+                    cubicTo(
+                        size.width * 0.34f,
+                        size.height * 0.18f,
+                        size.width * 0.22f,
+                        size.height * 0.62f,
+                        size.width * 0.48f,
+                        size.height * 0.86f,
+                    )
+                    cubicTo(
+                        size.width * 0.66f,
+                        size.height * 1.02f,
+                        size.width * 0.92f,
+                        size.height * 0.88f,
+                        size.width * 0.96f,
+                        size.height * 0.68f,
+                    )
+                    cubicTo(
+                        size.width * 0.66f,
+                        size.height * 0.82f,
+                        size.width * 0.4f,
+                        size.height * 0.56f,
+                        size.width * 0.52f,
+                        size.height * 0.3f,
+                    )
+                    cubicTo(
+                        size.width * 0.56f,
+                        size.height * 0.2f,
+                        size.width * 0.62f,
+                        size.height * 0.13f,
+                        size.width * 0.68f,
+                        size.height * 0.08f,
+                    )
+                    close()
+                }
+                drawPath(moon, color)
+            }
+        }
+    }
 }
 
 @Composable

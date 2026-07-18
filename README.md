@@ -1,4 +1,4 @@
-# Luna Fetch 🌙 — v1.0.1
+# Luna Fetch 🌙 — v1.0.2
 
 Luna Fetch es una aplicación multiplataforma para analizar y descargar videos o audio mediante `yt-dlp` y FFmpeg. Está construida con Kotlin Multiplatform y Compose Multiplatform para compartir interfaz, estados y reglas entre Windows, Linux y Android.
 
@@ -49,10 +49,10 @@ Generar APK de depuración:
 .\build-release.ps1 -LocalOnly -SkipSigning
 ```
 
-El build local genera EXE, MSI, APK de depuración y `SHA256SUMS.txt` dentro de `release/`. Una publicación oficial requiere el certificado de Windows y la firma Android descrita en [Docs/packaging.md](Docs/packaging.md); publica EXE, MSI, APK y AAB. MSIX y Microsoft Store están fuera de la distribución del proyecto.
+El build local genera EXE, MSI, tres APK de depuración por arquitectura y `SHA256SUMS.txt` dentro de `release/`. Una publicación oficial requiere el certificado de Windows y la firma Android descrita en [Docs/packaging.md](Docs/packaging.md); publica EXE, MSI y APK para ARM64, ARM32 y x86_64. MSIX y Microsoft Store están fuera de la distribución del proyecto.
 
 ## Licencias
 
-El código propio de Luna Fetch se publica bajo MIT. La distribución Android incorpora componentes con licencias adicionales, incluido `youtubedl-android` bajo GPL-3.0. Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) antes de redistribuir un APK o AAB.
+El código propio de Luna Fetch se publica bajo MIT. La distribución Android incorpora componentes con licencias adicionales, incluido `youtubedl-android` bajo GPL-3.0. Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) antes de redistribuir un APK.
 
 Biglex J · 2026
