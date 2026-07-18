@@ -7,7 +7,12 @@ data class VideoInfo(
     val durationSeconds: Double,
     val thumbnailUrl: String,
     val maxHeight: Int,
+    val collectionTitle: String? = null,
+    val collectionCount: Int = 0,
 )
+
+val VideoInfo.isCollection: Boolean
+    get() = !collectionTitle.isNullOrBlank() && collectionCount > 1
 
 enum class MediaFormat(
     val displayName: String,
@@ -65,6 +70,7 @@ data class DownloadRequest(
     val destination: String,
     val format: MediaFormat,
     val quality: QualityOption,
+    val downloadCollection: Boolean = false,
 )
 
 enum class DownloadPhase {
@@ -92,6 +98,9 @@ data class DownloadProgress(
         }
 }
 
-data class DownloadResult(val outputPath: String?)
+data class DownloadResult(
+    val outputPaths: List<String>,
+    val openPath: String? = outputPaths.singleOrNull(),
+)
 
 class DownloadException(message: String, cause: Throwable? = null) : Exception(message, cause)

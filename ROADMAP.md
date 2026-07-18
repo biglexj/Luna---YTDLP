@@ -11,6 +11,7 @@
 - Cola de descargas y selección de elementos de playlists.
 - Historial local con apertura rápida de archivos.
 - Administración y actualización guiada de `yt-dlp`/FFmpeg en escritorio.
+- Recorte cuadrado opcional para portadas de audio.
 
 ## Completado
 
@@ -20,3 +21,4 @@
 - Motor Android local, almacenamiento SAF y servicio en primer plano.
 - Empaquetado EXE, MSI, DEB/RPM y APK ARM64/ARM32/x86_64 con hashes SHA-256; MSIX descartado.
 - División de APK Android por ABI; APK universal, x86 y AAB descartados.
+- Metadatos, portada y descarga de colecciones de audio.

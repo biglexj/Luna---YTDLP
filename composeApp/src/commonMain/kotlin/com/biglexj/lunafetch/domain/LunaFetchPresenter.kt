@@ -18,6 +18,7 @@ data class LunaFetchState(
     val selectedFormat: MediaFormat = MediaFormat.Mp4,
     val qualities: List<QualityOption> = FormatCatalog.qualities(MediaFormat.Mp4, 1080),
     val selectedQuality: QualityOption = qualities.first(),
+    val downloadCollection: Boolean = false,
     val isAnalyzing: Boolean = false,
     val isDownloading: Boolean = false,
     val progress: DownloadProgress? = null,
@@ -45,6 +46,10 @@ class LunaFetchPresenter(
 
     fun selectQuality(quality: QualityOption) = _state.update { it.copy(selectedQuality = quality) }
 
+    fun setDownloadCollection(value: Boolean) = _state.update { current ->
+        current.copy(downloadCollection = value && current.video?.isCollection == true)
+    }
+
     fun analyze() {
         val url = state.value.url.trim()
         if (!isSupportedUrl(url)) {
@@ -62,6 +67,7 @@ class LunaFetchPresenter(
                             video = video,
                             qualities = qualities,
                             selectedQuality = qualities.first(),
+                            downloadCollection = video.isCollection,
                             isAnalyzing = false,
                         )
                     }
@@ -99,6 +105,7 @@ class LunaFetchPresenter(
             destination = current.destination,
             format = current.selectedFormat,
             quality = current.selectedQuality,
+            downloadCollection = current.downloadCollection,
         )
         operation?.cancel()
         operation = scope.launch {
@@ -121,7 +128,7 @@ class LunaFetchPresenter(
                     it.copy(
                         isDownloading = false,
                         progress = DownloadProgress(100.0, phase = DownloadPhase.Completed),
-                        completedOutput = result.outputPath,
+                        completedOutput = result.openPath,
                     )
                 }
             } catch (cancelled: CancellationException) {

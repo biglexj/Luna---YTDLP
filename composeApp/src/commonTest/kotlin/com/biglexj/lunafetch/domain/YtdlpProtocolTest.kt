@@ -32,8 +32,30 @@ class YtdlpProtocolTest {
         val arguments = YtdlpProtocol.buildDownloadArguments(request, "C:/Downloads/%(title)s.%(ext)s")
         assertTrue("-x" in arguments)
         assertTrue("--audio-format" in arguments)
+        assertTrue("--embed-metadata" in arguments)
+        assertTrue("--embed-thumbnail" in arguments)
+        assertTrue("--convert-thumbnails" in arguments)
+        assertTrue("--no-playlist" in arguments)
         assertFalse(arguments.any { it.contains("\"https://") })
         assertEquals(request.url, arguments.last())
+    }
+
+    @Test
+    fun collectionAudioAddsAlbumTrackAndPlaylistOptions() {
+        val request = DownloadRequest(
+            url = "https://example.com/playlist?list=2",
+            destination = "unused",
+            format = MediaFormat.M4a,
+            quality = FormatCatalog.qualities(MediaFormat.M4a, 1080).first(),
+            downloadCollection = true,
+        )
+
+        val arguments = YtdlpProtocol.buildDownloadArguments(request, "C:/Downloads/%(title)s.%(ext)s")
+
+        assertTrue("--yes-playlist" in arguments)
+        assertTrue("%(playlist_title)s:%(meta_album)s" in arguments)
+        assertTrue("%(playlist_index)s:%(meta_track)s" in arguments)
+        assertFalse("--no-playlist" in arguments)
     }
 
     @Test

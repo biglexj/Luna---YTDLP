@@ -38,6 +38,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
@@ -73,6 +74,7 @@ import com.biglexj.lunafetch.domain.LunaFetchState
 import com.biglexj.lunafetch.domain.MediaFormat
 import com.biglexj.lunafetch.domain.PlatformBindings
 import com.biglexj.lunafetch.domain.QualityOption
+import com.biglexj.lunafetch.domain.isCollection
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.collectAsState
 import kotlin.math.cos
@@ -368,7 +370,12 @@ private fun VideoCard(state: LunaFetchState, presenter: LunaFetchPresenter) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(video.uploader, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(formatDuration(video.durationSeconds), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val detail = if (video.isCollection) {
+                    "Lista · ${video.collectionCount} elementos"
+                } else {
+                    formatDuration(video.durationSeconds)
+                }
+                Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -402,6 +409,35 @@ private fun DownloadOptionsCard(
             enabled = !state.isDownloading,
         )
     }
+    if (state.selectedFormat.isAudio) {
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Incluye los metadatos y portada disponibles.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    state.video?.takeIf { it.isCollection }?.let { collection ->
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Descargar colección completa", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    "${collection.collectionCount} elementos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = state.downloadCollection,
+                onCheckedChange = presenter::setDownloadCollection,
+                enabled = !state.isDownloading,
+            )
+        }
+    }
     Spacer(Modifier.height(12.dp))
     Text("Destino", style = MaterialTheme.typography.labelLarge)
     Spacer(Modifier.height(6.dp))
@@ -424,7 +460,10 @@ private fun DownloadOptionsCard(
         enabled = state.video != null && !state.isDownloading,
         shape = RoundedCornerShape(14.dp),
     ) {
-        Text("Descargar ${state.selectedFormat.extension.uppercase()}")
+        Text(
+            if (state.downloadCollection) "Descargar colección"
+            else "Descargar ${state.selectedFormat.extension.uppercase()}",
+        )
     }
 }
 

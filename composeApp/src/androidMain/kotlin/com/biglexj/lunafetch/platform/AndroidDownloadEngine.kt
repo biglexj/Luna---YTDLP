@@ -36,6 +36,8 @@ class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
                 maxHeight = info.formats?.maxOfOrNull { it.height }?.takeIf { it > 0 }
                     ?: info.height.takeIf { it > 0 }
                     ?: 1080,
+                collectionTitle = info.property("playlistTitle") as? String,
+                collectionCount = (info.property("playlistCount") as? Number)?.toInt() ?: 0,
             )
         } catch (error: Exception) {
             throw DownloadException(error.message ?: "No se pudo analizar el enlace en Android.", error)
@@ -52,7 +54,10 @@ class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
             ?: throw DownloadException("Selecciona una carpeta válida.")
         val workRoot = File(context.cacheDir, "downloads")
         val workDirectory = File(workRoot, System.currentTimeMillis().toString()).apply { mkdirs() }
-        val outputTemplate = File(workDirectory, "%(title)s.%(ext)s").absolutePath
+        val outputTemplate = File(
+            workDirectory,
+            if (request.downloadCollection) "%(playlist_index)03d - %(title)s.%(ext)s" else "%(title)s.%(ext)s",
+        ).absolutePath
         val id = "lunafetch-${System.currentTimeMillis()}"
         processId = id
         DownloadForegroundService.start(context)
@@ -74,12 +79,26 @@ class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
                 throw DownloadException(response.err.ifBlank { "yt-dlp terminó con código ${response.exitCode}." })
             }
             response.out.lineSequence().filter(String::isNotBlank).forEach(onLog)
-            val reportedPath = response.out.lineSequence().mapNotNull(YtdlpProtocol::outputPath).lastOrNull()
-            val downloaded = reportedPath?.let(::File)?.takeIf(File::isFile)
-                ?: workDirectory.walkTopDown().filter(File::isFile).maxByOrNull(File::lastModified)
-                ?: throw DownloadException("La descarga terminó, pero no se encontró el archivo resultante.")
-            val resultUri = copyToTree(downloaded, treeUri)
-            DownloadResult(resultUri.toString())
+            val downloaded = response.out.lineSequence()
+                .mapNotNull(YtdlpProtocol::outputPath)
+                .map(::File)
+                .filter(File::isFile)
+                .distinctBy { it.absolutePath }
+                .toList()
+                .ifEmpty {
+                    workDirectory.walkTopDown()
+                        .filter(File::isFile)
+                        .filterNot { it.extension.equals("part", true) }
+                        .toList()
+                }
+            if (downloaded.isEmpty()) {
+                throw DownloadException("La descarga terminó, pero no se encontró el archivo resultante.")
+            }
+            val resultUris = copyToTree(downloaded, treeUri)
+            DownloadResult(
+                outputPaths = resultUris.map(Uri::toString),
+                openPath = if (resultUris.size == 1) resultUris.first().toString() else treeUri.toString(),
+            )
         } catch (error: Exception) {
             throw DownloadException(error.message ?: "No se pudo completar la descarga en Android.", error)
         } finally {
@@ -109,7 +128,6 @@ class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
     }
 
     private fun androidRequest(url: String): YoutubeDLRequest = YoutubeDLRequest(url)
-        .addOption("--no-playlist")
         .addOption("--js-runtimes", "quickjs")
         .addOption("--remote-components", "ejs:github")
 
@@ -126,23 +144,30 @@ class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
         }
     }
 
-    private fun copyToTree(source: File, treeUri: Uri): Uri {
+    private fun copyToTree(sources: List<File>, treeUri: Uri): List<Uri> {
         val resolver = context.contentResolver
         val parent = DocumentsContract.buildDocumentUriUsingTree(
             treeUri,
             DocumentsContract.getTreeDocumentId(treeUri),
         )
-        val created = DocumentsContract.createDocument(
-            resolver,
-            parent,
-            mimeType(source.extension),
-            source.name,
-        ) ?: throw DownloadException("Android no permitió crear el archivo en la carpeta elegida.")
-        resolver.openOutputStream(created, "w")?.use { output ->
-            source.inputStream().use { input -> input.copyTo(output) }
-        } ?: throw DownloadException("Android no permitió escribir el archivo descargado.")
-        return created
+        return sources.map { source ->
+            val created = DocumentsContract.createDocument(
+                resolver,
+                parent,
+                mimeType(source.extension),
+                source.name,
+            ) ?: throw DownloadException("Android no permitió crear el archivo en la carpeta elegida.")
+            resolver.openOutputStream(created, "w")?.use { output ->
+                source.inputStream().use { input -> input.copyTo(output) }
+            } ?: throw DownloadException("Android no permitió escribir el archivo descargado.")
+            created
+        }
     }
+
+    private fun Any.property(name: String): Any? = runCatching {
+        val getter = "get" + name.replaceFirstChar(Char::uppercaseChar)
+        javaClass.methods.firstOrNull { it.name == getter && it.parameterCount == 0 }?.invoke(this)
+    }.getOrNull()
 
     private fun mimeType(extension: String): String = when (extension.lowercase()) {
         "mp4", "m4v" -> "video/mp4"

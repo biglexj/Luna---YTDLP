@@ -1,8 +1,8 @@
-# 🌙 Luna Fetch 1.0.2
+# 🌙 Luna Fetch 1.0.3
 
-Una actualización más ligera y directa para Android.
+Tu audio descargado conserva más contexto, sin complicar el flujo.
 
-- 📦 APK independientes para ARM64, ARM32 y x86_64.
-- ⚡ Sin APK universal, x86 ni AAB: descargas mucho más pequeñas.
-- 🌓 Un único control para alternar Sistema, Claro y Oscuro.
-- 🔐 Paquetes firmados y hashes SHA-256 para cada descarga.
+- 🎵 Metadatos y portada embebidos cuando estén disponibles.
+- 💿 Playlists y álbumes completos, con pistas numeradas.
+- 📱 APK firmados para ARM64, ARM32 y x86_64.
+- 🔐 Hashes SHA-256 para cada paquete.

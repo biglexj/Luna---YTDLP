@@ -1,5 +1,9 @@
 # Release Notes — Luna Fetch
 
+## [1.0.3] — Audio con contexto — 2026-07-18
+
+MP3 y M4A conservan ahora todos los metadatos y portada que entregue la fuente, sin asumir que cada audio es una canción. Las playlists y álbumes se detectan como colecciones, pueden descargarse completas y numeran sus pistas; cuando existen, su título e índice se incorporan como álbum y pista.
+
 ## [1.0.2] — APK por arquitectura — 2026-07-18
 
 Android se distribuye ahora en APK firmados y separados para ARM64, ARM32 y x86_64: se eliminan el APK universal, x86 y AAB para reducir drásticamente las descargas. El selector de tema se simplifica a un único icono que rota entre Sistema, Claro y Oscuro.

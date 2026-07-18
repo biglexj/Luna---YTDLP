@@ -29,7 +29,7 @@ class DesktopDownloadEngine(
 
     override suspend fun analyze(url: String): VideoInfo = withContext(Dispatchers.IO) {
         val process = startProcess(
-            listOf(executable, "--ignore-config", "--no-colors", "--dump-single-json", "--no-playlist", "--", url),
+            listOf(executable, "--ignore-config", "--no-colors", "--dump-single-json", "--", url),
         )
         activeProcess.set(process)
         try {
@@ -58,11 +58,14 @@ class DesktopDownloadEngine(
         }
         if (!destination.isDirectory) throw DownloadException("El destino seleccionado no es una carpeta.")
 
-        val outputTemplate = File(destination, "%(title)s.%(ext)s").absolutePath
+        val outputTemplate = File(
+            destination,
+            if (request.downloadCollection) "%(playlist_index)03d - %(title)s.%(ext)s" else "%(title)s.%(ext)s",
+        ).absolutePath
         val arguments = listOf(executable) + YtdlpProtocol.buildDownloadArguments(request, outputTemplate)
         val process = startProcess(arguments)
         activeProcess.set(process)
-        var finalPath: String? = null
+        val finalPaths = mutableListOf<String>()
         onProgress(DownloadProgress(0.0, phase = DownloadPhase.Preparing))
 
         try {
@@ -72,7 +75,7 @@ class DesktopDownloadEngine(
                         lines.forEach { line ->
                             onLog(line)
                             YtdlpProtocol.parseProgress(line)?.let(onProgress)
-                            YtdlpProtocol.outputPath(line)?.let { finalPath = it }
+                            YtdlpProtocol.outputPath(line)?.let(finalPaths::add)
                         }
                     }
                 }
@@ -89,7 +92,17 @@ class DesktopDownloadEngine(
                 stderr.await()
                 if (exitCode != 0) throw DownloadException("yt-dlp terminó con código $exitCode. Revisa el registro técnico.")
             }
-            DownloadResult(finalPath ?: destination.absolutePath)
+            val completedPaths = finalPaths.distinct().ifEmpty {
+                destination.walkTopDown()
+                    .filter(File::isFile)
+                    .filterNot { it.extension.equals("part", true) }
+                    .map { it.absolutePath }
+                    .toList()
+            }
+            DownloadResult(
+                outputPaths = completedPaths,
+                openPath = if (completedPaths.size == 1) completedPaths.first() else destination.absolutePath,
+            )
         } finally {
             activeProcess.compareAndSet(process, null)
         }
@@ -125,6 +138,8 @@ class DesktopDownloadEngine(
                 durationSeconds = root["duration"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
                 thumbnailUrl = root["thumbnail"]?.jsonPrimitive?.content.orEmpty(),
                 maxHeight = root["height"]?.jsonPrimitive?.intOrNull ?: findMaxHeight(root),
+                collectionTitle = collectionTitle(root),
+                collectionCount = collectionCount(root),
             )
         } catch (error: Exception) {
             throw DownloadException("yt-dlp devolvió metadatos que Luna Fetch no pudo interpretar.", error)
@@ -136,4 +151,14 @@ class DesktopDownloadEngine(
         ?.maxOfOrNull { format -> format.jsonObject["height"]?.jsonPrimitive?.intOrNull ?: 0 }
         ?.takeIf { it > 0 }
         ?: 1080
+
+    private fun collectionTitle(root: kotlinx.serialization.json.JsonObject): String? =
+        root["playlist_title"]?.jsonPrimitive?.content
+            ?: root.takeIf { it["_type"]?.jsonPrimitive?.content == "playlist" }
+                ?.get("title")?.jsonPrimitive?.content
+
+    private fun collectionCount(root: kotlinx.serialization.json.JsonObject): Int =
+        root["playlist_count"]?.jsonPrimitive?.intOrNull
+            ?: (root["entries"] as? kotlinx.serialization.json.JsonArray)?.size
+            ?: 0
 }

@@ -66,12 +66,27 @@ object YtdlpProtocol {
             ),
         )
         if (request.format.isAudio) {
-            addAll(listOf("-x", "--audio-format", request.format.extension))
+            addAll(
+                listOf(
+                    "-x",
+                    "--audio-format",
+                    request.format.extension,
+                    "--embed-metadata",
+                    "--embed-thumbnail",
+                    "--convert-thumbnails",
+                    "jpg",
+                ),
+            )
             request.quality.audioQuality?.let { addAll(listOf("--audio-quality", it)) }
+            if (request.downloadCollection) {
+                addAll(listOf("--parse-metadata", "%(playlist_title)s:%(meta_album)s"))
+                addAll(listOf("--parse-metadata", "%(playlist_index)s:%(meta_track)s"))
+            }
         } else {
             addAll(listOf("--merge-output-format", request.format.extension))
         }
-        addAll(listOf("-o", outputTemplate, "--no-playlist", "--", request.url))
+        add(if (request.downloadCollection) "--yes-playlist" else "--no-playlist")
+        addAll(listOf("-o", outputTemplate, "--", request.url))
     }
 
     private fun String?.normalizedMetric(): String = this
