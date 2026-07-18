@@ -35,7 +35,7 @@ function Get-MsiProductCode {
     $view.Execute()
     $record = $view.Fetch()
     if (-not $record) { throw "No se encontró ProductCode en $Path." }
-    return $record.StringData(1)
+    return $record.StringData(1).Trim()
 }
 
 function Update-WingetManifest {

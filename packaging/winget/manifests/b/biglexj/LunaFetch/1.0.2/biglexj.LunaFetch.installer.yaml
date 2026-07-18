@@ -9,7 +9,7 @@ InstallModes:
   - silent
   - silentWithProgress
 UpgradeBehavior: install
-ProductCode: ' {E83A6051-16E4-32D1-A5A1-C7E3E47C3D62}'
+ProductCode: '{E83A6051-16E4-32D1-A5A1-C7E3E47C3D62}'
 ReleaseDate: 2026-07-18
 Installers:
   - Architecture: x64
