@@ -8,13 +8,22 @@ import com.biglexj.lunafetch.domain.DownloadException
 import com.biglexj.lunafetch.domain.DownloadProgress
 import com.biglexj.lunafetch.domain.DownloadRequest
 import com.biglexj.lunafetch.domain.DownloadResult
+import com.biglexj.lunafetch.domain.CollectionEntry
 import com.biglexj.lunafetch.domain.VideoInfo
 import com.biglexj.lunafetch.domain.YtdlpProtocol
+import com.biglexj.lunafetch.domain.isCollection
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.yausername.ffmpeg.FFmpeg
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
 class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
@@ -26,19 +35,29 @@ class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
     override suspend fun analyze(url: String): VideoInfo = withContext(Dispatchers.IO) {
         initialize()
         try {
-            val info = YoutubeDL.getInfo(androidRequest(url))
-            VideoInfo(
-                url = url,
-                title = info.title ?: "Título desconocido",
-                uploader = info.uploader ?: "Autor desconocido",
-                durationSeconds = info.duration.toDouble(),
-                thumbnailUrl = info.thumbnail.orEmpty(),
-                maxHeight = info.formats?.maxOfOrNull { it.height }?.takeIf { it > 0 }
-                    ?: info.height.takeIf { it > 0 }
-                    ?: 1080,
-                collectionTitle = info.property("playlistTitle") as? String,
-                collectionCount = (info.property("playlistCount") as? Number)?.toInt() ?: 0,
+            val response = YoutubeDL.execute(
+                androidRequest(url).addCommands(
+                    listOf("--dump-single-json", "--flat-playlist", "--yes-playlist", "--no-warnings"),
+                ),
             )
+            if (response.exitCode != 0) {
+                throw DownloadException(response.err.ifBlank { "yt-dlp no pudo analizar el enlace." })
+            }
+            val parsed = response.out.toVideoInfo(url)
+            if (parsed.thumbnailUrl.isBlank() && parsed.isCollection) {
+                response.out.firstCollectionVideoUrl()?.let { firstVideoUrl ->
+                    val firstItem = YoutubeDL.getInfo(
+                        androidRequest(firstVideoUrl).addOption("--no-playlist"),
+                    )
+                    parsed.copy(
+                        thumbnailUrl = firstItem.thumbnail.orEmpty().ifBlank {
+                            firstItem.thumbnails?.lastOrNull()?.url.orEmpty()
+                        },
+                    )
+                } ?: parsed
+            } else {
+                parsed
+            }
         } catch (error: Exception) {
             throw DownloadException(error.message ?: "No se pudo analizar el enlace en Android.", error)
         }
@@ -164,10 +183,91 @@ class AndroidDownloadEngine(private val context: Context) : DownloadEngine {
         }
     }
 
-    private fun Any.property(name: String): Any? = runCatching {
-        val getter = "get" + name.replaceFirstChar(Char::uppercaseChar)
-        javaClass.methods.firstOrNull { it.name == getter && it.parameterCount == 0 }?.invoke(this)
-    }.getOrNull()
+    private fun String.toVideoInfo(url: String): VideoInfo {
+        val root = Json.parseToJsonElement(this).jsonObject
+        val rawEntries = root["entries"]?.jsonArray ?: JsonArray(emptyList())
+        val entries = rawEntries.mapIndexedNotNull { index, entry ->
+            entry.jsonObject.let {
+                CollectionEntry(
+                    index = it.int("playlist_index", index + 1),
+                    title = it.string("title").ifBlank { return@let null },
+                    uploader = it.string("uploader").ifBlank { it.string("channel") },
+                    durationSeconds = it.double("duration"),
+                )
+            }
+        }
+        val isCollection = entries.size > 1
+        val thumbnail = if (isCollection) {
+            root.thumbnail().ifBlank { rawEntries.firstYoutubeThumbnail() }
+        } else {
+            root.thumbnail()
+        }
+        return VideoInfo(
+            url = url,
+            title = root.string("title").ifBlank { "Título desconocido" },
+            uploader = root.string("uploader").ifBlank { root.string("channel").ifBlank { "Autor desconocido" } },
+            durationSeconds = root.double("duration"),
+            thumbnailUrl = thumbnail,
+            maxHeight = root["formats"]?.jsonArray?.maxOfOrNull { it.jsonObject.int("height") }
+                ?.takeIf { it > 0 } ?: root.int("height", 1080),
+            collectionTitle = root.string("playlist_title").ifBlank { if (isCollection) root.string("title") else "" }
+                .ifBlank { null },
+            collectionCount = root.int("playlist_count", entries.size),
+            collectionEntries = entries,
+        )
+    }
+
+    private fun JsonArray.firstThumbnail(): String =
+        firstOrNull()?.jsonObject?.thumbnail().orEmpty()
+
+    private fun JsonArray.firstYoutubeThumbnail(): String =
+        firstOrNull()?.jsonObject?.string("id")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
+            .orEmpty()
+
+    private fun JsonObject.thumbnail(): String {
+        val directThumbnail = string("thumbnail")
+        if (directThumbnail.isNotBlank() && (!directThumbnail.contains("/s_p/") || directThumbnail.contains("?"))) {
+            return directThumbnail
+        }
+        val list = this["thumbnails"]?.jsonArray
+            ?.mapNotNull {
+                val u = it.jsonObject.string("url")
+                if (u.contains("/s_p/") && !u.contains("?")) null else u.takeIf { it.isNotBlank() }
+            }
+            .orEmpty()
+        return list.lastOrNull() ?: directThumbnail
+    }
+
+    private fun JsonObject.string(name: String): String =
+        this[name]?.jsonPrimitive?.contentOrNull.orEmpty()
+
+    private fun JsonObject.int(name: String, fallback: Int = 0): Int =
+        this[name]?.jsonPrimitive?.content?.toIntOrNull() ?: fallback
+
+    private fun JsonObject.double(name: String): Double =
+        this[name]?.jsonPrimitive?.content?.toDoubleOrNull() ?: 0.0
+
+    private fun String.firstCollectionVideoUrl(): String? {
+        val entry = Json.parseToJsonElement(this).jsonObject["entries"]
+            ?.jsonArray
+            ?.firstOrNull()
+            ?.jsonObject
+            ?: return null
+        return entry.string("webpage_url")
+            .ifBlank { entry.string("original_url") }
+            .ifBlank {
+                entry.string("url").takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
+            }
+            .ifBlank {
+                entry.string("id").ifBlank { entry.string("url") }
+                    .takeIf { it.isNotBlank() }
+                    ?.let { "https://www.youtube.com/watch?v=$it" }
+                    .orEmpty()
+            }
+            .takeIf { it.isNotBlank() }
+    }
 
     private fun mimeType(extension: String): String = when (extension.lowercase()) {
         "mp4", "m4v" -> "video/mp4"

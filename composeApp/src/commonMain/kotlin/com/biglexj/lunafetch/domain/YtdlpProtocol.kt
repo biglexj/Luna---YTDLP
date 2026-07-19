@@ -75,6 +75,8 @@ object YtdlpProtocol {
                     "--embed-thumbnail",
                     "--convert-thumbnails",
                     "jpg",
+                    "--postprocessor-args",
+                    "ThumbnailsConvertor+FFmpeg_o:-vf crop=ih:ih:(iw-ih)/2:0",
                 ),
             )
             request.quality.audioQuality?.let { addAll(listOf("--audio-quality", it)) }

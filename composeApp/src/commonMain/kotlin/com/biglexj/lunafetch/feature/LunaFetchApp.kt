@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -32,8 +33,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
@@ -45,6 +48,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +73,7 @@ import coil3.compose.AsyncImage
 import com.biglexj.lunafetch.core.theme.LunaFetchTheme
 import com.biglexj.lunafetch.core.theme.ThemeMode
 import com.biglexj.lunafetch.domain.DownloadPhase
+import com.biglexj.lunafetch.domain.CollectionEntry
 import com.biglexj.lunafetch.domain.LunaFetchPresenter
 import com.biglexj.lunafetch.domain.LunaFetchState
 import com.biglexj.lunafetch.domain.MediaFormat
@@ -81,12 +86,24 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 @Composable
-fun LunaFetchApp(platform: PlatformBindings) {
+fun LunaFetchApp(
+    platform: PlatformBindings,
+    quickDownloadUrl: String? = null,
+    onDismissQuickDownload: () -> Unit = {},
+) {
     val presenter = remember(platform) { LunaFetchPresenter(platform) }
     val state by presenter.state.collectAsState()
     var themeMode by remember { mutableStateOf(ThemeMode.System) }
 
     LunaFetchTheme(themeMode) {
+        if (quickDownloadUrl != null) {
+            LaunchedEffect(quickDownloadUrl) {
+                presenter.setUrl(quickDownloadUrl)
+                presenter.analyze()
+            }
+            QuickDownloadSheet(state, presenter, onDismissQuickDownload)
+            return@LunaFetchTheme
+        }
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 AppHeader(themeMode, onThemeSelected = { themeMode = it })
@@ -123,6 +140,59 @@ fun LunaFetchApp(platform: PlatformBindings) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun QuickDownloadSheet(
+    state: LunaFetchState,
+    presenter: LunaFetchPresenter,
+    onDismiss: () -> Unit,
+) {
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)) {
+        ModalBottomSheet(onDismissRequest = onDismiss) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text("Descarga rápida", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                when {
+                    state.isAnalyzing -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp)
+                        Text("Analizando enlace…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    state.video != null -> {
+                        val video = state.video
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CoverThumbnail(video.thumbnailUrl, "Miniatura de ${video.title}", state.selectedFormat.isAudio)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(video.collectionTitle ?: video.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(video.uploader, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (video.isCollection) Text("${video.collectionCount} canciones", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Text("Formato", style = MaterialTheme.typography.labelLarge)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(MediaFormat.Mp3, MediaFormat.Mp4).forEach { format ->
+                                val selected = state.selectedFormat == format
+                                if (selected) Button(onClick = { }, modifier = Modifier.weight(1f), enabled = false) { Text(format.displayName) }
+                                else OutlinedButton(onClick = { presenter.selectFormat(format) }, modifier = Modifier.weight(1f)) { Text(format.displayName) }
+                            }
+                        }
+                        Text("Calidad: ${state.selectedQuality.displayName}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(
+                            onClick = presenter::download,
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            enabled = !state.isDownloading,
+                        ) { Text(if (state.isDownloading) "Descargando…" else if (video.isCollection) "Descargar colección" else "Iniciar descarga") }
+                    }
+                }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Cancelar") }
+                Spacer(Modifier.height(10.dp))
             }
         }
     }
@@ -346,6 +416,10 @@ private fun LinkCard(state: LunaFetchState, presenter: LunaFetchPresenter) = Lun
 @Composable
 private fun VideoCard(state: LunaFetchState, presenter: LunaFetchPresenter) {
     val video = state.video ?: return
+    if (video.isCollection) {
+        CollectionEntriesCard(video, state.selectedFormat.isAudio)
+        return
+    }
     val openModifier = if (state.completedOutput != null) {
         Modifier.clickable(onClick = presenter::openCompletedOutput)
     } else {
@@ -353,12 +427,17 @@ private fun VideoCard(state: LunaFetchState, presenter: LunaFetchPresenter) {
     }
     LunaCard(modifier = openModifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            val thumbnailModifier = if (state.selectedFormat.isAudio) {
+                Modifier.size(88.dp)
+            } else {
+                Modifier.size(width = 150.dp, height = 88.dp)
+            }
             AsyncImage(
                 model = video.thumbnailUrl,
                 contentDescription = "Miniatura de ${video.title}",
-                modifier = Modifier.size(width = 150.dp, height = 88.dp).clip(RoundedCornerShape(14.dp))
+                modifier = thumbnailModifier.clip(RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop,
+                contentScale = if (state.selectedFormat.isAudio) ContentScale.Crop else ContentScale.Fit,
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -377,6 +456,86 @@ private fun VideoCard(state: LunaFetchState, presenter: LunaFetchPresenter) {
                 }
                 Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+@Composable
+private fun CollectionEntriesCard(video: com.biglexj.lunafetch.domain.VideoInfo, isAudio: Boolean) {
+    val entries = video.collectionEntries
+    if (entries.isEmpty()) return
+
+    LunaCard {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            CoverThumbnail(video.thumbnailUrl, "Portada de ${video.collectionTitle ?: "la colección"}", isAudio)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    video.collectionTitle ?: "Lista de reproducción",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(video.uploader, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "${entries.size} canciones detectadas",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        entries.forEach { CollectionEntryRow(it) }
+    }
+}
+
+@Composable
+private fun CoverThumbnail(model: String, description: String, isAudio: Boolean) {
+    Box(
+        modifier = (if (isAudio) Modifier.size(88.dp) else Modifier.size(width = 150.dp, height = 88.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = description,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = if (isAudio) ContentScale.Crop else ContentScale.Fit,
+        )
+    }
+}
+
+@Composable
+private fun CollectionEntryRow(entry: CollectionEntry) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            entry.index.toString().padStart(2, '0'),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (entry.uploader.isNotBlank()) {
+                Text(
+                    entry.uploader,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (entry.durationSeconds > 0) {
+            Text(
+                formatDuration(entry.durationSeconds),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

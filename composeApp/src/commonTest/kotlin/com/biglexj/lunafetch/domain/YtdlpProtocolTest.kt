@@ -35,6 +35,7 @@ class YtdlpProtocolTest {
         assertTrue("--embed-metadata" in arguments)
         assertTrue("--embed-thumbnail" in arguments)
         assertTrue("--convert-thumbnails" in arguments)
+        assertTrue("ThumbnailsConvertor+FFmpeg_o:-vf crop=ih:ih:(iw-ih)/2:0" in arguments)
         assertTrue("--no-playlist" in arguments)
         assertFalse(arguments.any { it.contains("\"https://") })
         assertEquals(request.url, arguments.last())

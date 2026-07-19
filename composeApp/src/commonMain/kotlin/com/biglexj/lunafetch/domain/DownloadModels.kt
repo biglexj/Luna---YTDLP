@@ -9,10 +9,18 @@ data class VideoInfo(
     val maxHeight: Int,
     val collectionTitle: String? = null,
     val collectionCount: Int = 0,
+    val collectionEntries: List<CollectionEntry> = emptyList(),
 )
 
 val VideoInfo.isCollection: Boolean
-    get() = !collectionTitle.isNullOrBlank() && collectionCount > 1
+    get() = !collectionTitle.isNullOrBlank() && (collectionCount > 1 || collectionEntries.size > 1)
+
+data class CollectionEntry(
+    val index: Int,
+    val title: String,
+    val uploader: String = "",
+    val durationSeconds: Double = 0.0,
+)
 
 enum class MediaFormat(
     val displayName: String,

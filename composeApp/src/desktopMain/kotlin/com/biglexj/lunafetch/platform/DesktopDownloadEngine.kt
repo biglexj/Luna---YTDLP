@@ -6,6 +6,7 @@ import com.biglexj.lunafetch.domain.DownloadPhase
 import com.biglexj.lunafetch.domain.DownloadProgress
 import com.biglexj.lunafetch.domain.DownloadRequest
 import com.biglexj.lunafetch.domain.DownloadResult
+import com.biglexj.lunafetch.domain.CollectionEntry
 import com.biglexj.lunafetch.domain.VideoInfo
 import com.biglexj.lunafetch.domain.YtdlpProtocol
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,8 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.contentOrNull
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
@@ -29,7 +32,16 @@ class DesktopDownloadEngine(
 
     override suspend fun analyze(url: String): VideoInfo = withContext(Dispatchers.IO) {
         val process = startProcess(
-            listOf(executable, "--ignore-config", "--no-colors", "--dump-single-json", "--", url),
+            listOf(
+                executable,
+                "--ignore-config",
+                "--no-colors",
+                "--dump-single-json",
+                "--flat-playlist",
+                "--yes-playlist",
+                "--",
+                url,
+            ),
         )
         activeProcess.set(process)
         try {
@@ -129,17 +141,27 @@ class DesktopDownloadEngine(
     private fun parseVideoInfo(url: String, payload: String): VideoInfo {
         try {
             val root = json.parseToJsonElement(payload).jsonObject
+            val entries = collectionEntries(root)
+            val isCollection = entries.size > 1
+
+            val thumbnail = if (isCollection) {
+                root.thumbnail().ifBlank {
+                    (root["entries"] as? kotlinx.serialization.json.JsonArray)?.firstYoutubeThumbnail().orEmpty()
+                }
+            } else {
+                root.thumbnail()
+            }
+
             return VideoInfo(
                 url = url,
-                title = root["title"]?.jsonPrimitive?.content ?: "Título desconocido",
-                uploader = root["uploader"]?.jsonPrimitive?.content
-                    ?: root["channel"]?.jsonPrimitive?.content
-                    ?: "Autor desconocido",
+                title = root.string("title").ifBlank { "Título desconocido" },
+                uploader = root.string("uploader").ifBlank { root.string("channel").ifBlank { "Autor desconocido" } },
                 durationSeconds = root["duration"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-                thumbnailUrl = root["thumbnail"]?.jsonPrimitive?.content.orEmpty(),
+                thumbnailUrl = thumbnail,
                 maxHeight = root["height"]?.jsonPrimitive?.intOrNull ?: findMaxHeight(root),
                 collectionTitle = collectionTitle(root),
                 collectionCount = collectionCount(root),
+                collectionEntries = entries,
             )
         } catch (error: Exception) {
             throw DownloadException("yt-dlp devolvió metadatos que Luna Fetch no pudo interpretar.", error)
@@ -153,12 +175,49 @@ class DesktopDownloadEngine(
         ?: 1080
 
     private fun collectionTitle(root: kotlinx.serialization.json.JsonObject): String? =
-        root["playlist_title"]?.jsonPrimitive?.content
-            ?: root.takeIf { it["_type"]?.jsonPrimitive?.content == "playlist" }
-                ?.get("title")?.jsonPrimitive?.content
+        root["playlist_title"]?.jsonPrimitive?.contentOrNull
+            ?: root.takeIf { it["_type"]?.jsonPrimitive?.contentOrNull == "playlist" }
+                ?.get("title")?.jsonPrimitive?.contentOrNull
 
     private fun collectionCount(root: kotlinx.serialization.json.JsonObject): Int =
         root["playlist_count"]?.jsonPrimitive?.intOrNull
             ?: (root["entries"] as? kotlinx.serialization.json.JsonArray)?.size
             ?: 0
+
+    private fun collectionEntries(root: kotlinx.serialization.json.JsonObject): List<CollectionEntry> =
+        (root["entries"] as? kotlinx.serialization.json.JsonArray)
+            ?.mapIndexedNotNull { index, element ->
+                val entry = element as? kotlinx.serialization.json.JsonObject ?: return@mapIndexedNotNull null
+                CollectionEntry(
+                    index = entry["playlist_index"]?.jsonPrimitive?.intOrNull ?: index + 1,
+                    title = entry["title"]?.jsonPrimitive?.contentOrNull ?: return@mapIndexedNotNull null,
+                    uploader = entry["uploader"]?.jsonPrimitive?.contentOrNull
+                        ?: entry["channel"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    durationSeconds = entry["duration"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                )
+            }
+            .orEmpty()
+
+    private fun kotlinx.serialization.json.JsonObject.string(name: String): String =
+        this[name]?.jsonPrimitive?.contentOrNull.orEmpty()
+
+    private fun kotlinx.serialization.json.JsonObject.thumbnail(): String {
+        val directThumbnail = string("thumbnail")
+        if (directThumbnail.isNotBlank() && (!directThumbnail.contains("/s_p/") || directThumbnail.contains("?"))) {
+            return directThumbnail
+        }
+        val list = this["thumbnails"]?.jsonArray
+            ?.mapNotNull {
+                val u = it.jsonObject.string("url")
+                if (u.contains("/s_p/") && !u.contains("?")) null else u.takeIf { it.isNotBlank() }
+            }
+            .orEmpty()
+        return list.lastOrNull() ?: directThumbnail
+    }
+
+    private fun kotlinx.serialization.json.JsonArray.firstYoutubeThumbnail(): String =
+        firstOrNull()?.jsonObject?.string("id")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
+            .orEmpty()
 }

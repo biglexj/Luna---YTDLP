@@ -257,7 +257,7 @@ $hashPath = Join-Path $output "SHA256SUMS.txt"
 $publishedArtifacts = @($exe, $msi) + $androidArtifacts
 $hashArtifacts = $publishedArtifacts
 $hashArtifacts |
-    Get-FileHash -Algorithm SHA256 |
+    ForEach-Object { Get-FileHash -LiteralPath $_ -Algorithm SHA256 } |
     ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
     Set-Content -LiteralPath $hashPath -Encoding UTF8
 
